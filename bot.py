@@ -14,22 +14,27 @@ def send(msg):
         print("Ошибка отправки:", e)
 
 
-# --- источник с CDN (не блокируется как search) ---
-def fetch_shard(shard=1, page=1):
-    # популярный shard, можно перебирать несколько
-    url = f"https://basket-01.wb.ru/vol0/data/main/ru/catalog/shard{shard}/{page}.json"
+def fetch():
+    url = "https://search.wb.ru/exactmatch/ru/common/v4/search"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
     }
+    params = {
+        "query": "",
+        "resultset": "catalog",
+        "limit": 50
+    }
+
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        print("STATUS:", r.status_code)
     except Exception as e:
         print("Ошибка запроса:", e)
         return []
 
     if r.status_code != 200:
-        print("Статус не 200:", r.status_code)
+        print("WB блокирует:", r.text[:200])
         return []
 
     try:
@@ -38,53 +43,39 @@ def fetch_shard(shard=1, page=1):
         print("Не JSON")
         return []
 
-    return data.get("products", [])
+    return data.get("data", {}).get("products", [])
 
 
-def check_wb():
-    products = []
-
-    # берём несколько страниц/шардов
-    for shard in [1, 2, 3]:
-        for page in [1, 2]:
-            products += fetch_shard(shard, page)
-
-    print("Всего товаров:", len(products))
+def check():
+    products = fetch()
 
     for p in products:
-        product_id = p.get("id")
+        pid = p.get("id")
         price = p.get("salePriceU", 0) / 100
+        bonus = p.get("salePrice", 0) / 100
 
-        # тут нет бонусов напрямую → имитируем через скидку
-        price_basic = p.get("priceU", 0) / 100
-
-        if not product_id or price <= 0 or price_basic <= 0:
+        if not pid or price <= 0:
             continue
 
-        if product_id in seen:
+        if pid in seen:
             continue
 
-        discount = 1 - (price / price_basic)
+        if bonus >= price * 0.7:
+            link = f"https://www.wildberries.ru/catalog/{pid}/detail.aspx"
 
-        # фильтр ~70% "выгоды"
-        if discount >= 0.7:
-            link = f"https://www.wildberries.ru/catalog/{product_id}/detail.aspx"
+            msg = f"""🔥 АКЦИЯ
 
-            msg = f"""🔥 АКЦИЯ (по скидке)
-
-💰 Было: {price_basic}₽
-💸 Сейчас: {price}₽
-📉 Скидка: {round(discount*100)}%
-
-👉 {link}
+Цена: {price}₽
+Баллы: {bonus}
+{link}
 """
             send(msg)
-            seen.add(product_id)
+            seen.add(pid)
 
 
 while True:
     try:
-        check_wb()
+        check()
     except Exception as e:
         print("Общая ошибка:", e)
 
