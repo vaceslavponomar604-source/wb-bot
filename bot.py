@@ -14,59 +14,63 @@ def send(msg):
         print("Ошибка отправки:", e)
 
 
-def fetch():
-    url = "https://search.wb.ru/exactmatch/ru/common/v4/search"
+def fetch_products():
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
-    params = {
-        "query": "",
-        "resultset": "catalog",
-        "limit": 50
+        "User-Agent": "Mozilla/5.0"
     }
 
-    try:
-        r = requests.get(url, headers=headers, params=params, timeout=10)
-        print("STATUS:", r.status_code)
-    except Exception as e:
-        print("Ошибка запроса:", e)
-        return []
+    products = []
 
-    if r.status_code != 200:
-        print("WB блокирует:", r.text[:200])
-        return []
+    # несколько источников (чтобы точно работало)
+    urls = [
+        "https://basket-01.wb.ru/vol0/data/main/ru/catalog/shard1/1.json",
+        "https://basket-02.wb.ru/vol0/data/main/ru/catalog/shard2/1.json",
+        "https://basket-03.wb.ru/vol0/data/main/ru/catalog/shard3/1.json"
+    ]
 
-    try:
-        data = r.json()
-    except:
-        print("Не JSON")
-        return []
+    for url in urls:
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            print("STATUS:", r.status_code)
 
-    return data.get("data", {}).get("products", [])
+            if r.status_code != 200:
+                continue
+
+            data = r.json()
+            products += data.get("products", [])
+
+        except Exception as e:
+            print("Ошибка:", e)
+
+    print("Всего товаров:", len(products))
+    return products
 
 
 def check():
-    products = fetch()
+    products = fetch_products()
 
     for p in products:
         pid = p.get("id")
         price = p.get("salePriceU", 0) / 100
-        bonus = p.get("salePrice", 0) / 100
+        price_old = p.get("priceU", 0) / 100
 
-        if not pid or price <= 0:
+        if not pid or price <= 0 or price_old <= 0:
             continue
 
         if pid in seen:
             continue
 
-        if bonus >= price * 0.7:
+        discount = 1 - (price / price_old)
+
+        if discount >= 0.7:  # 70% выгоды
             link = f"https://www.wildberries.ru/catalog/{pid}/detail.aspx"
 
-            msg = f"""🔥 АКЦИЯ
+            msg = f"""🔥 НАЙДЕНА АКЦИЯ
 
-Цена: {price}₽
-Баллы: {bonus}
+Старая цена: {price_old}₽
+Цена сейчас: {price}₽
+Скидка: {round(discount*100)}%
+
 {link}
 """
             send(msg)
