@@ -15,17 +15,19 @@ def send(msg):
 
 
 def check_wb():
-    url = "https://search.wb.ru/exactmatch/ru/common/v4/search"
+    url = "https://search.wb.ru/exactmatch/ru/common/v5/search"
 
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Connection": "keep-alive"
     }
 
     params = {
         "query": "",
         "resultset": "catalog",
         "sort": "popular",
-        "limit": 50
+        "limit": 100
     }
 
     try:
@@ -34,17 +36,21 @@ def check_wb():
         print("Ошибка запроса:", e)
         return
 
+    print("Status:", r.status_code)
+
     if r.status_code != 200:
-        print("Статус не 200:", r.status_code)
+        print("WB блокирует или ошибка:", r.text[:200])
         return
 
     try:
         data = r.json()
-    except:
-        print("WB вернул не JSON")
+    except Exception as e:
+        print("Не JSON:", r.text[:200])
         return
 
     products = data.get("data", {}).get("products", [])
+
+    print("Найдено товаров:", len(products))
 
     for p in products:
         product_id = p.get("id")
@@ -60,11 +66,11 @@ def check_wb():
         if price > 0 and bonus >= price * 0.7:
             link = f"https://www.wildberries.ru/catalog/{product_id}/detail.aspx"
 
-            msg = f"""🔥 Нашёл акцию
+            msg = f"""🔥 АКЦИЯ
 
 💰 Цена: {price}₽
 🎯 Баллы: {bonus}
-📊 %: {round(bonus/price*100)}%
+📊 {round(bonus/price*100)}%
 
 👉 {link}
 """
