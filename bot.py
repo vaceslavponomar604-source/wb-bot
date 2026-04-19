@@ -6,6 +6,12 @@ CHAT_ID = "798337490"
 
 seen = set()
 
+# ⚠️ ВСТАВЬ СЮДА ПРОКСИ
+PROXY = "http://username:password@host:port"
+# если нет — оставь None
+# PROXY = None
+
+
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
@@ -18,8 +24,10 @@ def check_wb():
     url = "https://search.wb.ru/exactmatch/ru/common/v5/search"
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
         "Accept": "application/json",
+        "Accept-Language": "ru-RU,ru;q=0.9",
+        "Referer": "https://www.wildberries.ru/",
         "Connection": "keep-alive"
     }
 
@@ -27,11 +35,13 @@ def check_wb():
         "query": "",
         "resultset": "catalog",
         "sort": "popular",
-        "limit": 100
+        "limit": 50
     }
 
+    proxies = {"http": PROXY, "https": PROXY} if PROXY else None
+
     try:
-        r = requests.get(url, params=params, headers=headers, timeout=10)
+        r = requests.get(url, params=params, headers=headers, proxies=proxies, timeout=10)
     except Exception as e:
         print("Ошибка запроса:", e)
         return
@@ -39,18 +49,18 @@ def check_wb():
     print("Status:", r.status_code)
 
     if r.status_code != 200:
-        print("WB блокирует или ошибка:", r.text[:200])
+        print("WB блокирует:", r.text[:100])
         return
 
     try:
         data = r.json()
-    except Exception as e:
-        print("Не JSON:", r.text[:200])
+    except:
+        print("Не JSON:", r.text[:100])
         return
 
     products = data.get("data", {}).get("products", [])
 
-    print("Найдено товаров:", len(products))
+    print("Товаров:", len(products))
 
     for p in products:
         product_id = p.get("id")
