@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from playwright_stealth import stealth
 
 
 async def main():
@@ -17,7 +17,9 @@ async def main():
         )
 
         page = await context.new_page()
-        await stealth_async(page)
+
+        # ВАЖНО: правильный вызов
+        await stealth(page)
 
         print("Открываю страницу...")
         await page.goto(url, timeout=60000)
