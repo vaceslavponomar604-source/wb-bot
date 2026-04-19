@@ -7,9 +7,8 @@ CHAT_ID = "798337490"
 seen = set()
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
-    "Accept": "application/json",
-    "Referer": "https://www.wildberries.ru/"
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
 }
 
 def send(msg):
@@ -18,16 +17,10 @@ def send(msg):
 
 
 def fetch():
-    url = "https://search.wb.ru/exactmatch/ru/common/v5/search"
+    url = "https://api.ozon.ru/composer-api.bx/page/json/v2"
 
     params = {
-        "appType": 1,
-        "curr": "rub",
-        "dest": -1257786,
-        "query": "",
-        "resultset": "catalog",
-        "sort": "popular",
-        "limit": 100
+        "url": "/category/elektronika-15500/?sort=score"
     }
 
     try:
@@ -37,46 +30,74 @@ def fetch():
         if r.status_code != 200:
             return []
 
-        data = r.json()
-        return data.get("data", {}).get("products", [])
+        return r.json()
 
     except Exception as e:
         print("Ошибка:", e)
-        return []
+        return {}
+
+
+def parse(data):
+    products = []
+
+    try:
+        widgets = data.get("widgetStates", {})
+
+        for key in widgets:
+            block = widgets[key]
+
+            if "items" in str(block):
+                for item in block.get("items", []):
+                    products.append(item)
+
+    except:
+        pass
+
+    return products
 
 
 def check():
-    products = fetch()
+    data = fetch()
+    items = parse(data)
 
-    print("Найдено:", len(products))
+    print("Найдено:", len(items))
 
-    for p in products:
-        pid = p.get("id")
+    for item in items:
+        try:
+            pid = item.get("id")
+            price = item.get("price", {}).get("price", 0)
+            old_price = item.get("price", {}).get("oldPrice", 0)
+            bonus = item.get("price", {}).get("cardPrice", 0)  # условный бонус
 
-        price = p.get("salePriceU", 0) / 100
-        bonus = p.get("feedbackPoints", 0)  # 🔥 ключевое поле
+            if not pid or price == 0:
+                continue
 
-        if not pid or price <= 0 or bonus <= 0:
-            continue
+            if pid in seen:
+                continue
 
-        if pid in seen:
-            continue
+            # считаем "выгоду"
+            if old_price > 0:
+                discount = 1 - (price / old_price)
+            else:
+                discount = 0
 
-        # условие: баллы ≥ 70% цены
-        if bonus >= price * 0.7:
-            link = f"https://www.wildberries.ru/catalog/{pid}/detail.aspx"
+            # фильтр ~70%
+            if discount >= 0.7:
+                link = f"https://www.ozon.ru/product/{pid}"
 
-            msg = f"""🔥 БАЛЛЫ ЗА ОТЗЫВ
+                msg = f"""🔥 АКЦИЯ OZON
 
 Цена: {price}₽
-Баллы: {bonus}
-Процент: {round((bonus/price)*100)}%
+Было: {old_price}₽
+Скидка: {round(discount*100)}%
 
 {link}
 """
-            send(msg)
-            seen.add(pid)
-            print("Отправлено:", pid)
+                send(msg)
+                seen.add(pid)
+
+        except Exception as e:
+            continue
 
 
 while True:
