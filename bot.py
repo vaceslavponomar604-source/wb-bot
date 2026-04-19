@@ -4,77 +4,79 @@ import time
 TOKEN = "8676074977:AAE9cgZtDvpSJW8NXDlH4EQBYuI-3K8NRfA"
 CHAT_ID = "798337490"
 
-# 👇 ВСТАВЬ СЮДА АРТИКУЛЫ WB (что реально важно тебе)
-PRODUCTS = [
-    12345678,
-    87654321,
-    11223344
-]
+seen = set()
 
-seen = {}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
+    "Accept": "application/json",
+    "Referer": "https://www.wildberries.ru/"
+}
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": CHAT_ID, "text": msg})
 
 
-def get_product(pid):
-    url = f"https://card.wb.ru/cards/detail?nm={pid}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+def fetch():
+    url = "https://search.wb.ru/exactmatch/ru/common/v5/search"
+
+    params = {
+        "appType": 1,
+        "curr": "rub",
+        "dest": -1257786,
+        "query": "",
+        "resultset": "catalog",
+        "sort": "popular",
+        "limit": 100
+    }
 
     try:
-        r = requests.get(url, headers=headers, timeout=5)
+        r = requests.get(url, headers=HEADERS, params=params, timeout=10)
+        print("STATUS:", r.status_code)
+
         if r.status_code != 200:
-            print("Ошибка WB:", r.status_code)
-            return None
+            return []
 
         data = r.json()
-        products = data.get("data", {}).get("products", [])
-        if not products:
-            return None
-
-        return products[0]
+        return data.get("data", {}).get("products", [])
 
     except Exception as e:
         print("Ошибка:", e)
-        return None
+        return []
 
 
 def check():
-    for pid in PRODUCTS:
-        p = get_product(pid)
-        if not p:
-            continue
+    products = fetch()
+
+    print("Найдено:", len(products))
+
+    for p in products:
+        pid = p.get("id")
 
         price = p.get("salePriceU", 0) / 100
-        old_price = p.get("priceU", 0) / 100
+        bonus = p.get("feedbackPoints", 0)  # 🔥 ключевое поле
 
-        if price <= 0 or old_price <= 0:
+        if not pid or price <= 0 or bonus <= 0:
             continue
 
-        discount = 1 - (price / old_price)
+        if pid in seen:
+            continue
 
-        # проверяем изменение
-        prev_price = seen.get(pid)
+        # условие: баллы ≥ 70% цены
+        if bonus >= price * 0.7:
+            link = f"https://www.wildberries.ru/catalog/{pid}/detail.aspx"
 
-        if prev_price != price:
-            seen[pid] = price
+            msg = f"""🔥 БАЛЛЫ ЗА ОТЗЫВ
 
-            # фильтр 70%
-            if discount >= 0.7:
-                link = f"https://www.wildberries.ru/catalog/{pid}/detail.aspx"
-
-                msg = f"""🔥 АКЦИЯ ОБНАРУЖЕНА
-
-Товар: {pid}
-Старая цена: {old_price}₽
-Цена сейчас: {price}₽
-Скидка: {round(discount*100)}%
+Цена: {price}₽
+Баллы: {bonus}
+Процент: {round((bonus/price)*100)}%
 
 {link}
 """
-                send(msg)
-                print("Отправлено:", pid)
+            send(msg)
+            seen.add(pid)
+            print("Отправлено:", pid)
 
 
 while True:
