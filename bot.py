@@ -1,15 +1,23 @@
 import requests
 import time
+import random
 
-TOKEN = "8676074977:AAE9cgZtDvpSJW8NXDlH4EQBYuI-3K8NRfA"
-CHAT_ID = "798337490"
+TOKEN = "ТВОЙ_ТГ_ТОКЕН"
+CHAT_ID = "ТВОЙ_CHAT_ID"
 
 seen = set()
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
+    "User-Agent": random.choice([
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Mozilla/5.0 (Linux; Android 10)"
+    ]),
+    "Accept": "application/json",
+    "Accept-Language": "ru-RU,ru;q=0.9",
+    "Connection": "keep-alive"
 }
+
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -17,18 +25,19 @@ def send(msg):
 
 
 def fetch():
-    url = "https://api.ozon.ru/composer-api.bx/page/json/v2"
+    url = "https://www.ozon.ru/api/composer-api.bx/page/json/v2"
 
     params = {
-        "url": "/category/elektronika-15500/?sort=score"
+        "url": "/search/?text=шампунь"
     }
 
     try:
         r = requests.get(url, headers=HEADERS, params=params, timeout=10)
+
         print("STATUS:", r.status_code)
 
         if r.status_code != 200:
-            return []
+            return {}
 
         return r.json()
 
@@ -43,11 +52,9 @@ def parse(data):
     try:
         widgets = data.get("widgetStates", {})
 
-        for key in widgets:
-            block = widgets[key]
-
-            if "items" in str(block):
-                for item in block.get("items", []):
+        for key, value in widgets.items():
+            if "items" in str(value):
+                for item in value.get("items", []):
                     products.append(item)
 
     except:
@@ -65,27 +72,23 @@ def check():
     for item in items:
         try:
             pid = item.get("id")
-            price = item.get("price", {}).get("price", 0)
-            old_price = item.get("price", {}).get("oldPrice", 0)
-            bonus = item.get("price", {}).get("cardPrice", 0)  # условный бонус
 
-            if not pid or price == 0:
+            price_data = item.get("price", {})
+            price = price_data.get("price", 0)
+            old_price = price_data.get("oldPrice", 0)
+
+            if not pid or price == 0 or old_price == 0:
                 continue
 
             if pid in seen:
                 continue
 
-            # считаем "выгоду"
-            if old_price > 0:
-                discount = 1 - (price / old_price)
-            else:
-                discount = 0
+            discount = 1 - (price / old_price)
 
-            # фильтр ~70%
             if discount >= 0.7:
                 link = f"https://www.ozon.ru/product/{pid}"
 
-                msg = f"""🔥 АКЦИЯ OZON
+                msg = f"""🔥 OZON АКЦИЯ
 
 Цена: {price}₽
 Было: {old_price}₽
@@ -96,7 +99,7 @@ def check():
                 send(msg)
                 seen.add(pid)
 
-        except Exception as e:
+        except:
             continue
 
 
